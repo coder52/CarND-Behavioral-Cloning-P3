@@ -62,11 +62,11 @@ def abs_sobel_thresh(img, orient='x', sobel_kernel=3, thresh=(0, 255)):
     abs_sobelx = np.absolute(sobelx)
     # Scale to 8-bit (0 - 255) then convert to type = np.uint8
     scaled_sobel = np.uint8(255*abs_sobelx/np.max(abs_sobelx))
-    # Create a mask of 1's where the scaled gradient magnitude 
+    # Create a mask of 1's where the scaled gradient magnitude
             # is > thresh_min and < thresh_max
     sxbinary = np.zeros_like(scaled_sobel)
     sxbinary[(scaled_sobel >= thresh[0]) & (scaled_sobel <= thresh[1])] = 1
-    # Return this mask as a binary image     
+    # Return this mask as a binary image
     return sxbinary
 def hls_select(img, channel='S', thresh=(0, 255)):
     # Convert to HLS color space
@@ -84,7 +84,7 @@ def hls_select(img, channel='S', thresh=(0, 255)):
     return hls_binary
 def thmask(img):
     absolute_sobel_x = abs_sobel_thresh(img, orient='x', sobel_kernel=3, thresh=(20, 100))
-    color_hls_S = hls_select(img, channel='S', thresh=(90, 255))    
+    color_hls_S = hls_select(img, channel='S', thresh=(90, 255))
     combined_binary = np.zeros_like(absolute_sobel_x)
     combined_binary[(color_hls_S == 1) | (absolute_sobel_x == 1)] = 1
     combined_img = np.dstack(( combined_binary, combined_binary, combined_binary))*255
@@ -105,11 +105,8 @@ def telemetry(sid, data):
         imgString = data["image"]
         image = Image.open(BytesIO(base64.b64decode(imgString)))
         ###################################################
-        ###################################################  
-        
         image_array = thmask(np.asarray(image))
-        ###################################################
-        
+        ###################################################        
         steering_angle = float(model.predict(image_array[None, :, :, :], batch_size=1))
 
         throttle = controller.update(float(speed))
