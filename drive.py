@@ -16,6 +16,8 @@ from keras.models import load_model
 import h5py
 from keras import __version__ as keras_version
 
+import cv2
+
 sio = socketio.Server()
 app = Flask(__name__)
 model = None
@@ -46,7 +48,49 @@ class SimplePIController:
 controller = SimplePIController(0.1, 0.002)
 set_speed = 9
 controller.set_desired(set_speed)
-
+####################################################
+########################to mask images##############
+def abs_sobel_thresh(img, orient='x', sobel_kernel=3, thresh=(0, 255)):
+    # Convert to grayscale
+    gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+    # Take the derivative in x or y given orient = 'x' or 'y'
+    if orient=='y':
+        sobelx = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=sobel_kernel)
+    else:
+        sobelx = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=sobel_kernel)
+    # Take the absolute value of the derivative or gradient
+    abs_sobelx = np.absolute(sobelx)
+    # Scale to 8-bit (0 - 255) then convert to type = np.uint8
+    scaled_sobel = np.uint8(255*abs_sobelx/np.max(abs_sobelx))
+    # Create a mask of 1's where the scaled gradient magnitude 
+            # is > thresh_min and < thresh_max
+    sxbinary = np.zeros_like(scaled_sobel)
+    sxbinary[(scaled_sobel >= thresh[0]) & (scaled_sobel <= thresh[1])] = 1
+    # Return this mask as a binary image     
+    return sxbinary
+def hls_select(img, channel='S', thresh=(0, 255)):
+    # Convert to HLS color space
+    hls = cv2.cvtColor(img, cv2.COLOR_RGB2HLS)
+    if channel=='H':
+        channel = hls[:,:,0]
+    elif channel=='L':
+        channel = hls[:,:,1]
+    elif channel=='S':
+        channel = hls[:,:,2]
+    # Apply a threshold to the S channel
+    hls_binary = np.zeros_like(channel)
+    hls_binary[(channel > thresh[0]) & (channel <= thresh[1])] = 1
+    # Return a binary image of threshold result
+    return hls_binary
+def thmask(img):
+    absolute_sobel_x = abs_sobel_thresh(img, orient='x', sobel_kernel=3, thresh=(20, 100))
+    color_hls_S = hls_select(img, channel='S', thresh=(90, 255))    
+    combined_binary = np.zeros_like(absolute_sobel_x)
+    combined_binary[(color_hls_S == 1) | (absolute_sobel_x == 1)] = 1
+    combined_img = np.dstack(( combined_binary, combined_binary, combined_binary))*255
+    return combined_img
+####################################################
+####################################################
 
 @sio.on('telemetry')
 def telemetry(sid, data):
@@ -60,7 +104,12 @@ def telemetry(sid, data):
         # The current image from the center camera of the car
         imgString = data["image"]
         image = Image.open(BytesIO(base64.b64decode(imgString)))
-        image_array = np.asarray(image)
+        ###################################################
+        ###################################################  
+        
+        image_array = thmask(np.asarray(image))
+        ###################################################
+        
         steering_angle = float(model.predict(image_array[None, :, :, :], batch_size=1))
 
         throttle = controller.update(float(speed))
